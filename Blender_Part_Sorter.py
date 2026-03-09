@@ -1,103 +1,155 @@
 bl_info = {
     "name": "Blender Part Sorter",
     "author": "RSDT",
-    "version": (1, 0),
+    "version": (0, 9),
     "blender": (3, 0, 0),
+    "location": "View3D > Sidebar > NFS Tools",
+    "description": "Agrupa objetos en colecciones para mantener orden.",
     "category": "Object",
-    "description": "Esta herramienta crea colecciones segun el tipo de prefijo de los objetos.",
 }
 
 import bpy
+from bpy.app.handlers import persistent
 from collections import defaultdict
+import time
+import re
 
-MIN_OBJECTS = 3
+MIN_COUNT = 3
+IGNORED_PREFIXES = {"LOD", "HIGH", "LOW", "DAM", "GLASS", "INT", "SHADOW", "BROKEN"}
+
+_last_run = 0.0
+_DEBOUNCE = 0.4
+
+def get_prefix(name: str) -> str:
+    name = (name or "").strip()
+    if not name:
+        return ""
+    
+    match = re.match(r'^([A-Za-z0-9]+)[_.-]?', name)
+    if not match:
+        return ""
+    
+    pref = match.group(1).upper()
+    if pref.isdigit():
+        return ""
+    return pref
 
 
-def get_prefix(name):
-    if "_" in name:
-        return name.split("_")[0]
-    return None
+def prefix_matches_collection_name(prefix: str, coll_name: str) -> bool:
+    p = prefix.upper()
+    c = coll_name.upper()
+    return c.startswith(p) and any(word in c for word in ["PART", "PARTS", "KIT", "PIEZAS"])
 
 
-def detect_user_removal(scene):
+def find_or_create_collection(prefix: str) -> bpy.types.Collection | None:
+    prefix_upper = prefix.upper()
+    scene_coll = bpy.context.scene.collection
+    
+    for coll in bpy.data.collections:
+        if prefix_matches_collection_name(prefix_upper, coll.name):
+            return coll
+    
+    new_name = f"{prefix}_PARTS"
+    new_coll = bpy.data.collections.new(new_name)
+    scene_coll.children.link(new_coll)
+    return new_coll
 
-    for obj in scene.objects:
 
-        if obj.get("ps_autosorted"):
+def is_root_or_system_collection(coll) -> bool:
+    if not coll:
+        return True
+    name_lower = coll.name.lower()
+    return (
+        name_lower in {"master", "scene collection", "collection"} or
+        name_lower.startswith(".") or
+        coll == bpy.context.scene.collection
+    )
 
-            prefix = get_prefix(obj.name)
 
-            if not prefix:
+@persistent
+def auto_sort_parts(scene, depsgraph):
+    global _last_run
+    
+    now = time.time()
+    if now - _last_run < _DEBOUNCE:
+        return
+    _last_run = now
+    
+    if getattr(auto_sort_parts, "is_running", False):
+        return
+    
+    auto_sort_parts.is_running = True
+    
+    try:
+        prefix_groups = defaultdict(list)
+        
+        for obj in bpy.data.objects:
+            if obj.type not in {'MESH', 'EMPTY', 'CURVE', 'ARMATURE'}:
                 continue
-
-            col_name = f"{prefix} Parts"
-
-            if col_name in bpy.data.collections:
-
-                col = bpy.data.collections[col_name]
-
-                if obj.name not in col.objects:
-                    obj["ps_user_removed"] = True
-
-
-def auto_sort(scene):
-
-    prefix_map = defaultdict(list)
-
-    for obj in scene.objects:
-
-        if obj.get("ps_user_removed"):
-            continue
-
-        prefix = get_prefix(obj.name)
-
-        if prefix:
-            prefix_map[prefix].append(obj)
-
-    for prefix, objs in prefix_map.items():
-
-        if len(objs) < MIN_OBJECTS:
-            continue
-
-        col_name = f"{prefix} Parts"
-
-        if col_name not in bpy.data.collections:
-
-            col = bpy.data.collections.new(col_name)
-            scene.collection.children.link(col)
-
-        else:
-            col = bpy.data.collections[col_name]
-
-        for obj in objs:
-
-            if obj.name not in col.objects:
-
-                col.objects.link(obj)
-
-                obj["ps_autosorted"] = True
-
-                for c in obj.users_collection:
-                    if c != col:
-                        c.objects.unlink(obj)
+            
+            pref = get_prefix(obj.name)
+            if not pref or pref in IGNORED_PREFIXES:
+                continue
+            
+            prefix_groups[pref].append(obj)
+        
+        for pref, objects in prefix_groups.items():
+            if len(objects) < MIN_COUNT:
+                continue
+            
+            target_coll = find_or_create_collection(pref)
+            if not target_coll:
+                continue
+            
+            for obj in objects:
+                for coll in list(obj.users_collection):
+                    if coll != target_coll:
+                        coll.objects.unlink(obj)
+                
+                if target_coll not in obj.users_collection:
+                    target_coll.objects.link(obj)
+    
+    except Exception as e:
+        print(f"Part Sorter error: {str(e)}")
+    
+    finally:
+        auto_sort_parts.is_running = False
 
 
-def depsgraph_handler(scene, depsgraph):
+class NFS_PT_PartSorter(bpy.types.Panel):
+    bl_label = "Part Sorter (NFS)"
+    bl_idname = "NFS_PT_partsorter_v9"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = 'NFS Tools'
+    
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text=f"Auto-activo (≥ {MIN_COUNT} objetos)")
+        layout.operator("scene.force_parts_sort", text="Ordenar ahora", icon='FILE_REFRESH')
 
-    detect_user_removal(scene)
-    auto_sort(scene)
+
+class NFS_OT_ForceSort(bpy.types.Operator):
+    bl_idname = "scene.force_parts_sort"
+    bl_label = "Forzar ordenamiento"
+    
+    def execute(self, context):
+        auto_sort_parts(bpy.context.scene, None)
+        self.report({'INFO'}, "Ordenamiento manual ejecutado")
+        return {'FINISHED'}
 
 
 def register():
-
-    if depsgraph_handler not in bpy.app.handlers.depsgraph_update_post:
-        bpy.app.handlers.depsgraph_update_post.append(depsgraph_handler)
+    bpy.utils.register_class(NFS_PT_PartSorter)
+    bpy.utils.register_class(NFS_OT_ForceSort)
+    bpy.app.handlers.depsgraph_update_post.append(auto_sort_parts)
+    auto_sort_parts.is_running = False
 
 
 def unregister():
-
-    if depsgraph_handler in bpy.app.handlers.depsgraph_update_post:
-        bpy.app.handlers.depsgraph_update_post.remove(depsgraph_handler)
+    bpy.app.handlers.depsgraph_update_post.remove(auto_sort_parts)
+    bpy.utils.unregister_class(NFS_OT_ForceSort)
+    bpy.utils.unregister_class(NFS_PT_PartSorter)
 
 
 if __name__ == "__main__":
