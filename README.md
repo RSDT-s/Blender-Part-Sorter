@@ -12,3 +12,7 @@ Por ahora no es necesario hacer nada para hacerlo funcional, todo se realiza aut
 ## Como se instala?
 
 Una vez tengas Blender abierto, dirigete a Edit -> Preferences -> Addons, allí, pulsa el icono de "∨" -> Install from Disk, hecho esto busca Blender Part Sorter.py y añadelo a blender, listo, el srcript ya estará funcionando.
+
+## Contacto
+
+Si encuentras cualquier error, no dudes en contactar conmigo, discord: dila3567_9
