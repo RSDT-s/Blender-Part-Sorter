@@ -4,13 +4,17 @@ on:
   push:
     branches:
       - main
+  release:
+    types: [published]
 
 jobs:
-  discord:
+  notify:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Send Discord notification
-        uses: Ilshidur/action-discord@1.4.0
+      - name: Send message to Discord
+        uses: Ilshidur/action-discord@master
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         with:
-          webhook: ${{ secrets.DISCORD_WEBHOOK }}
-          message: ":octocat: **RSDT** ha hecho un push en **${{ github.repository }}**\nMensaje: ${{ github.event.head_commit.message }}\n🔗 ${{ github.event.head_commit.url }}"
+          args: "🐙 **Nuevo commit en Blender Part Sorter**\nAutor: ${{ github.actor }}\nMensaje: ${{ github.event.head_commit.message }}\n🔗 https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
