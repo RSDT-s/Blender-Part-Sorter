@@ -17,4 +17,9 @@ jobs:
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         with:
-          args: "🐙 **Nuevo commit en Blender Part Sorter**\nAutor: ${{ github.actor }}\nMensaje: ${{ github.event.head_commit.message }}\n🔗 https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
+          args: "@everyone 🐙 **Nuevo update en ${{ github.repository }}**
+          
+Autor: ${{ github.actor }}
+Mensaje: ${{ github.event.head_commit.message }}
+
+📦 Repo: https://github.com/${{ github.repository }}
