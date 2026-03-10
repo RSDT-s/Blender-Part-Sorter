@@ -35,6 +35,4 @@ Once you have Blender open, go to Edit -> Preferences -> Addons. There, click on
 ## Contact
 
 If you find any errors, please do not hesitate to contact me on Discord: dila3567_9
-
-
-Translated with DeepL.com (free version)
+and sorry if english translation is cooked
