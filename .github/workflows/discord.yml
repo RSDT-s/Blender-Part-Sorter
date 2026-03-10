@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-  release:
-    types: [published]
 
 jobs:
   notify:
@@ -23,3 +21,4 @@ Autor: ${{ github.actor }}
 Mensaje: ${{ github.event.head_commit.message }}
 
 📦 Repo: https://github.com/${{ github.repository }}
+🔗 Commit: https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
